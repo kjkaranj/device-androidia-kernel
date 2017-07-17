@@ -2655,6 +2655,11 @@ static void i915_reset_and_wakeup(struct drm_i915_private *dev_priv)
 	intel_runtime_pm_get(dev_priv);
 	intel_prepare_reset(dev_priv);
 
+	/*
+	 * TODO: Enable SLPC with TDR indication to SLPC in case of
+	 * Engine Reset.
+	 */
+
 	do {
 		/*
 		 * All state reset _must_ be completed before we update the

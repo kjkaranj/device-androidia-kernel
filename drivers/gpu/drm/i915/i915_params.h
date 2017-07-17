@@ -40,6 +40,7 @@
 	func(int, enable_ppgtt); \
 	func(int, enable_execlists); \
 	func(int, enable_psr); \
+	func(int, enable_slpc); \
 	func(int, disable_power_well); \
 	func(int, enable_ips); \
 	func(int, invert_brightness); \
@@ -66,6 +67,7 @@
 	func(bool, enable_dp_mst); \
 	func(bool, enable_dpcd_backlight); \
 	func(bool, enable_gvt); \
+	func(bool, enable_guc_critical_logging); \
 	func(int, memtrack_debug)
 
 #define MEMBER(T, member) T member
@@ -77,4 +79,3 @@ struct i915_params {
 extern struct i915_params i915 __read_mostly;
 
 #endif
-

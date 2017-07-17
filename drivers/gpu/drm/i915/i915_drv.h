@@ -859,6 +859,7 @@ struct intel_csr {
 	func(has_rc6p); \
 	func(has_resource_streamer); \
 	func(has_runtime_pm); \
+	func(has_slpc); \
 	func(has_snoop); \
 	func(cursor_needs_physical); \
 	func(hws_needs_physical); \
@@ -1381,7 +1382,12 @@ struct intel_gen6_power_mgmt {
 	struct list_head clients;
 	bool client_boost;
 
-	bool enabled;
+	/*
+	 * For platforms prior to Gen9, RPS and RC6 status is tracked through
+	 * "rps_enabled". For Gen9+, RC6 is tracked through "rc6_enabled".
+	 */
+	bool rps_enabled;
+	bool rc6_enabled;
 	struct delayed_work autoenable_work;
 	unsigned boosts;
 
@@ -2334,7 +2340,7 @@ struct drm_i915_private {
 	/* Cannot be determined by PCIID. You must always read a register. */
 	u32 edram_cap;
 
-	/* gen6+ rps state */
+	/* gen6+ rps/rc6 state */
 	struct intel_gen6_power_mgmt rps;
 
 	/* ilk-only ips/rps state. Everything in here is protected by the global
@@ -2933,6 +2939,7 @@ intel_info(const struct drm_i915_private *dev_priv)
 #define HAS_GUC_UCODE(dev_priv)	(HAS_GUC(dev_priv))
 #define HAS_GUC_SCHED(dev_priv)	(HAS_GUC(dev_priv))
 #define HAS_HUC_UCODE(dev_priv)	(HAS_GUC(dev_priv))
+#define HAS_SLPC(dev_priv)	((dev_priv)->info.has_slpc)
 
 #define HAS_RESOURCE_STREAMER(dev_priv) ((dev_priv)->info.has_resource_streamer)
 
@@ -3627,6 +3634,7 @@ int i915_debugfs_register(struct drm_i915_private *dev_priv);
 void i915_debugfs_unregister(struct drm_i915_private *dev_priv);
 int i915_debugfs_connector_add(struct drm_connector *connector);
 void intel_display_crc_init(struct drm_i915_private *dev_priv);
+int buffer_tokenize(char *buf, char *words[], int max_words);
 #else
 static inline int i915_debugfs_register(struct drm_i915_private *dev_priv) {return 0;}
 static inline void i915_debugfs_unregister(struct drm_i915_private *dev_priv) {}

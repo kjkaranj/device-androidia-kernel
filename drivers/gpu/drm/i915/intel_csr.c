@@ -50,11 +50,6 @@ MODULE_FIRMWARE(I915_CSR_SKL);
 MODULE_FIRMWARE(I915_CSR_BXT);
 #define BXT_CSR_VERSION_REQUIRED	CSR_VERSION(1, 7)
 
-#define FIRMWARE_URL  "https://01.org/linuxgraphics/intel-linux-graphics-firmwares"
-
-
-
-
 #define CSR_MAX_FW_SIZE			0x2FFF
 #define CSR_DEFAULT_FW_OFFSET		0xFFFFFFFF
 
@@ -305,11 +300,12 @@ static uint32_t *parse_csr_fw(struct drm_i915_private *dev_priv,
 
 	if (csr->version != required_version) {
 		DRM_INFO("Refusing to load DMC firmware v%u.%u,"
-			 " please use v%u.%u [" FIRMWARE_URL "].\n",
+			 " please use v%u.%u [%s].\n",
 			 CSR_VERSION_MAJOR(csr->version),
 			 CSR_VERSION_MINOR(csr->version),
 			 CSR_VERSION_MAJOR(required_version),
-			 CSR_VERSION_MINOR(required_version));
+			 CSR_VERSION_MINOR(required_version),
+			 I915_FIRMWARE_URL);
 		return NULL;
 	}
 
@@ -401,8 +397,9 @@ static void csr_load_work_fn(struct work_struct *work)
 	csr = &dev_priv->csr;
 
 	request_firmware(&fw, dev_priv->csr.fw_path, &dev_priv->drm.pdev->dev);
-	if (fw)
+	if (fw) {
 		dev_priv->csr.dmc_payload = parse_csr_fw(dev_priv, fw);
+        }
 
 	if (dev_priv->csr.dmc_payload) {
 		intel_csr_load_program(dev_priv);
@@ -415,9 +412,9 @@ static void csr_load_work_fn(struct work_struct *work)
 			 CSR_VERSION_MINOR(csr->version));
 	} else {
 		dev_notice(dev_priv->drm.dev,
-			   "Failed to load DMC firmware"
-			   " [" FIRMWARE_URL "],"
-			   " disabling runtime power management.\n");
+			   " [%s],"
+			   " disabling runtime power management.\n",
+			   I915_FIRMWARE_URL);
 	}
 
 	release_firmware(fw);

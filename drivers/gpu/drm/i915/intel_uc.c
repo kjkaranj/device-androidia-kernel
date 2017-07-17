@@ -43,9 +43,11 @@ static bool intel_guc_recv(struct intel_guc *guc, u32 *status)
 	return INTEL_GUC_RECV_IS_RESPONSE(val);
 }
 
-int intel_guc_send(struct intel_guc *guc, const u32 *action, u32 len)
+int __intel_guc_send_mmio(struct intel_guc *guc, const u32 *action, u32 len,
+		          u32 *output)
 {
 	struct drm_i915_private *dev_priv = guc_to_i915(guc);
+        union slpc_event_output_header header;
 	u32 status;
 	int i;
 	int ret;
@@ -92,10 +94,30 @@ int intel_guc_send(struct intel_guc *guc, const u32 *action, u32 len)
 	}
 	dev_priv->guc.action_status = status;
 
+        /*
+	 * Output data from Host to GuC SLPC actions is populated in scratch
+	 * registers SOFT_SCRATCH(1) to SOFT_SCRATCH(14) based on event.
+	 * Currently only SLPC action status in GuC is meaningful as Host
+	 * can query only overridden parameters and that are fetched from
+	 * Host-GuC SLPC shared data.
+	 */
+	if (output && !ret) {
+		output[0] = header.value = I915_READ(SOFT_SCRATCH(1));
+		ret = header.status;
+	}
+
 	intel_uncore_forcewake_put(dev_priv, FORCEWAKE_ALL);
 	mutex_unlock(&guc->send_mutex);
 
+	i915.enable_slpc = 1;
+
 	return ret;
+}
+
+
+int intel_guc_send(struct intel_guc *guc, const u32 *action, u32 len)
+{
+	return __intel_guc_send_mmio(guc, action, len, NULL);
 }
 
 int intel_guc_sample_forcewake(struct intel_guc *guc)
@@ -113,4 +135,3 @@ int intel_guc_sample_forcewake(struct intel_guc *guc)
 
 	return intel_guc_send(guc, action, ARRAY_SIZE(action));
 }
-
