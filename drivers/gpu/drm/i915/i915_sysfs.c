@@ -352,9 +352,14 @@ static ssize_t gt_max_freq_mhz_show(struct device *kdev, struct device_attribute
 {
 	struct drm_i915_private *dev_priv = kdev_minor_to_i915(kdev);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-			intel_gpu_freq(dev_priv,
-				       dev_priv->rps.max_freq_softlimit));
+	if (dev_priv->guc.slpc.active)
+		return snprintf(buf, PAGE_SIZE, "%d\n",
+				intel_gpu_freq(dev_priv,
+					dev_priv->guc.slpc.max_unslice_freq));
+	else
+		return snprintf(buf, PAGE_SIZE, "%d\n",
+				intel_gpu_freq(dev_priv,
+					dev_priv->rps.max_freq_softlimit));
 }
 
 static ssize_t gt_max_freq_mhz_store(struct device *kdev,
@@ -374,6 +379,13 @@ static ssize_t gt_max_freq_mhz_store(struct device *kdev,
 	mutex_lock(&dev_priv->rps.hw_lock);
 
 	val = intel_freq_opcode(dev_priv, val);
+
+	if (dev_priv->guc.slpc.active) {
+		ret = intel_slpc_max_freq_set(dev_priv, val);
+		mutex_unlock(&dev_priv->rps.hw_lock);
+		intel_runtime_pm_put(dev_priv);
+		return ret ? ret : count;
+	}
 
 	if (val < dev_priv->rps.min_freq ||
 	    val > dev_priv->rps.max_freq ||
@@ -409,9 +421,14 @@ static ssize_t gt_min_freq_mhz_show(struct device *kdev, struct device_attribute
 {
 	struct drm_i915_private *dev_priv = kdev_minor_to_i915(kdev);
 
-	return snprintf(buf, PAGE_SIZE, "%d\n",
-			intel_gpu_freq(dev_priv,
-				       dev_priv->rps.min_freq_softlimit));
+	if (dev_priv->guc.slpc.active)
+		return snprintf(buf, PAGE_SIZE, "%d\n",
+				intel_gpu_freq(dev_priv,
+					dev_priv->guc.slpc.min_unslice_freq));
+	else
+		return snprintf(buf, PAGE_SIZE, "%d\n",
+				intel_gpu_freq(dev_priv,
+					dev_priv->rps.min_freq_softlimit));
 }
 
 static ssize_t gt_min_freq_mhz_store(struct device *kdev,
@@ -431,6 +448,13 @@ static ssize_t gt_min_freq_mhz_store(struct device *kdev,
 	mutex_lock(&dev_priv->rps.hw_lock);
 
 	val = intel_freq_opcode(dev_priv, val);
+
+	if (dev_priv->guc.slpc.active) {
+		ret = intel_slpc_min_freq_set(dev_priv, val);
+		mutex_unlock(&dev_priv->rps.hw_lock);
+		intel_runtime_pm_put(dev_priv);
+		return ret ? ret : count;
+	}
 
 	if (val < dev_priv->rps.min_freq ||
 	    val > dev_priv->rps.max_freq ||

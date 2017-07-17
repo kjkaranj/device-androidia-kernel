@@ -1148,9 +1148,9 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 	}
 
 	ret = _request_firmware_prepare(&fw, name, device, buf, size);
-	if (ret <= 0) /* error or already assigned */
+	if (ret <= 0) /* error or already assigned */ {
 		goto out;
-
+        }
 	ret = 0;
 	timeout = firmware_loading_timeout();
 	if (opt_flags & FW_OPT_NOWAIT) {

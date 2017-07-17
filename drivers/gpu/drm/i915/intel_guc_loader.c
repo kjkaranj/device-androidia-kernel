@@ -53,23 +53,31 @@
  *
  */
 
-#define SKL_FW_MAJOR 6
-#define SKL_FW_MINOR 1
+#define SKL_FW_MAJOR 9
+#define SKL_FW_MINOR 33
 
-#define BXT_FW_MAJOR 8
-#define BXT_FW_MINOR 7
+#define BXT_FW_MAJOR 9
+#define BXT_FW_MINOR 29
 
 #define KBL_FW_MAJOR 9
-#define KBL_FW_MINOR 14
+#define KBL_FW_MINOR 39
+
+#define I915_SLPC_REQUIRED_GUC_MAJOR 9
 
 #define GUC_FW_PATH(platform, major, minor) \
        "i915/" __stringify(platform) "_guc_ver" __stringify(major) "_" __stringify(minor) ".bin"
 
+#define GUC_FW_DIRECT_PATH(platform, major, minor) \
+        __stringify(platform) "_guc_ver" __stringify(major) "_" __stringify(minor) ".bin"
+
 #define I915_SKL_GUC_UCODE GUC_FW_PATH(skl, SKL_FW_MAJOR, SKL_FW_MINOR)
 MODULE_FIRMWARE(I915_SKL_GUC_UCODE);
 
-#define I915_BXT_GUC_UCODE GUC_FW_PATH(bxt, BXT_FW_MAJOR, BXT_FW_MINOR)
-MODULE_FIRMWARE(I915_BXT_GUC_UCODE);
+//#define I915_BXT_GUC_UCODE GUC_FW_PATH(bxt, BXT_FW_MAJOR, BXT_FW_MINOR)
+//MODULE_FIRMWARE(I915_BXT_GUC_UCODE);
+
+#define I915_BXT_GUC_UCODE_DIRECT GUC_FW_DIRECT_PATH(bxt, BXT_FW_MAJOR, BXT_FW_MINOR)
+MODULE_FIRMWARE(I915_BXT_GUC_UCODE_DIRECT);
 
 #define I915_KBL_GUC_UCODE GUC_FW_PATH(kbl, KBL_FW_MAJOR, KBL_FW_MINOR)
 MODULE_FIRMWARE(I915_KBL_GUC_UCODE);
@@ -183,8 +191,10 @@ static u32 get_core_family(struct drm_i915_private *dev_priv)
 static void guc_params_init(struct drm_i915_private *dev_priv)
 {
 	struct intel_guc *guc = &dev_priv->guc;
+	struct intel_uc_fw *guc_fw = &dev_priv->guc.fw;
 	u32 params[GUC_CTL_MAX_DWORDS];
 	int i;
+	bool enable_critical_logging = false;
 
 	memset(&params, 0, sizeof(params));
 
@@ -205,13 +215,33 @@ static void guc_params_init(struct drm_i915_private *dev_priv)
 	params[GUC_CTL_FEATURE] |= GUC_CTL_DISABLE_SCHEDULER |
 			GUC_CTL_VCS2_ENABLED;
 
+	if (i915.enable_slpc)
+		params[GUC_CTL_FEATURE] |= GUC_CTL_ENABLE_SLPC;
+
 	params[GUC_CTL_LOG_PARAMS] = guc->log.flags;
 
+	/*
+	 * Enable critical logging in GuC based on i915.guc_log_level and
+	 * i915.enable_guc_critical_logging.
+	 */
 	if (i915.guc_log_level >= 0) {
 		params[GUC_CTL_DEBUG] =
 			i915.guc_log_level << GUC_LOG_VERBOSITY_SHIFT;
-	} else
+		enable_critical_logging = true;
+	} else {
 		params[GUC_CTL_DEBUG] = GUC_LOG_DISABLED;
+		if (i915.enable_guc_critical_logging)
+			enable_critical_logging = true;
+	}
+
+	if (NEEDS_GUC_CRITICAL_LOGGING(dev_priv, guc_fw)) {
+		if (enable_critical_logging)
+			params[GUC_CTL_DEBUG] &=
+				~GUC_V9_CRITICAL_LOGGING_DISABLED;
+		else
+			params[GUC_CTL_DEBUG] |=
+				GUC_V9_CRITICAL_LOGGING_DISABLED;
+	}
 
 	if (guc->ads_vma) {
 		u32 ads = guc_ggtt_offset(guc->ads_vma) >> PAGE_SHIFT;
@@ -491,6 +521,7 @@ int intel_guc_setup(struct drm_i915_private *dev_priv)
 	if (err)
 		goto fail;
 
+        intel_slpc_init(dev_priv);
 	/*
 	 * WaEnableuKernelHeaderValidFix:skl,bxt
 	 * For BXT, this is only upto B0 but below WA is required for later
@@ -521,6 +552,14 @@ int intel_guc_setup(struct drm_i915_private *dev_priv)
 	guc_fw->load_status = INTEL_UC_FIRMWARE_SUCCESS;
 
 	intel_guc_auth_huc(dev_priv);
+        /*
+         * SLPC is enabled by setting up the shared data structure and
+         * sending reset event to GuC SLPC. Initial data is setup in
+         * intel_slpc_init. Here we send the reset event. SLPC enabling
+         * in GuC can happen in parallel in GuC with other initialization
+         * being done in i915.
+         */
+        intel_slpc_enable(dev_priv);
 
 	if (i915.enable_guc_submission) {
 		if (i915.guc_log_level >= 0)
@@ -536,6 +575,16 @@ int intel_guc_setup(struct drm_i915_private *dev_priv)
 		 i915.enable_guc_submission ? "submission enabled" : "loaded",
 		 guc_fw->path,
 		 guc_fw->major_ver_found, guc_fw->minor_ver_found);
+
+	if (guc_fw->major_ver_wanted <
+			I915_SLPC_REQUIRED_GUC_MAJOR) {
+		DRM_INFO("SLPC not supported with GuC firmware"
+			 " v%u, please use v%u+ [%s].\n",
+			 guc_fw->major_ver_found,
+			 I915_SLPC_REQUIRED_GUC_MAJOR,
+			 I915_FIRMWARE_URL);
+		i915.enable_slpc = 0;
+	}
 
 	return 0;
 
@@ -600,11 +649,13 @@ void intel_uc_fw_fetch(struct drm_i915_private *dev_priv,
 	DRM_DEBUG_DRIVER("before requesting firmware: uC fw fetch status %s\n",
 		intel_uc_fw_status_repr(uc_fw->fetch_status));
 
-	err = request_firmware(&fw, uc_fw->path, &pdev->dev);
-	if (err)
+	err = request_firmware_direct(&fw, uc_fw->path, &pdev->dev);
+	if (err) {
 		goto fail;
-	if (!fw)
+        }
+	if (!fw) {
 		goto fail;
+        }
 
 	DRM_DEBUG_DRIVER("fetch uC fw from %s succeeded, fw %p\n",
 		uc_fw->path, fw);
@@ -754,7 +805,8 @@ void intel_guc_init(struct drm_i915_private *dev_priv)
 		guc_fw->major_ver_wanted = SKL_FW_MAJOR;
 		guc_fw->minor_ver_wanted = SKL_FW_MINOR;
 	} else if (IS_BROXTON(dev_priv)) {
-		fw_path = I915_BXT_GUC_UCODE;
+		//fw_path = I915_BXT_GUC_UCODE;
+		fw_path = I915_BXT_GUC_UCODE_DIRECT;
 		guc_fw->major_ver_wanted = BXT_FW_MAJOR;
 		guc_fw->minor_ver_wanted = BXT_FW_MINOR;
 	} else if (IS_KABYLAKE(dev_priv)) {

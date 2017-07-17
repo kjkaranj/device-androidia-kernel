@@ -1091,6 +1091,170 @@ DEFINE_SIMPLE_ATTRIBUTE(i915_next_seqno_fops,
 			i915_next_seqno_get, i915_next_seqno_set,
 			"0x%llx\n");
 
+static int i915_slpc_info(struct seq_file *m, void *unused)
+{
+	struct drm_i915_private *dev_priv = node_to_i915(m->private);
+	int i, value;
+	struct slpc_shared_data data;
+	enum slpc_global_state global_state;
+	enum slpc_platform_sku platform_sku;
+	struct slpc_task_state_data *task_data;
+	enum slpc_power_plan power_plan;
+	enum slpc_power_source power_source;
+
+	if (!dev_priv->guc.slpc.active)
+		return -ENODEV;
+
+	intel_runtime_pm_get(dev_priv);
+	mutex_lock(&dev_priv->rps.hw_lock);
+
+	intel_slpc_read_shared_data(dev_priv, &data);
+
+	mutex_unlock(&dev_priv->rps.hw_lock);
+	intel_runtime_pm_put(dev_priv);
+
+	seq_printf(m, "shared data size: %d\n", data.shared_data_size);
+
+	global_state = (enum slpc_global_state) data.global_state;
+	seq_printf(m, "global state: %d (", global_state);
+	seq_printf(m, "%s)\n", intel_slpc_get_state_str(global_state));
+
+	platform_sku = (enum slpc_platform_sku)
+			data.platform_info.platform_sku;
+	seq_printf(m, "sku: %d (", platform_sku);
+	switch (platform_sku) {
+	case SLPC_PLATFORM_SKU_UNDEFINED:
+		seq_puts(m, "undefined)\n");
+		break;
+	case SLPC_PLATFORM_SKU_ULX:
+		seq_puts(m, "ULX)\n");
+		break;
+	case SLPC_PLATFORM_SKU_ULT:
+		seq_puts(m, "ULT)\n");
+		break;
+	case SLPC_PLATFORM_SKU_T:
+		seq_puts(m, "T)\n");
+		break;
+	case SLPC_PLATFORM_SKU_MOBL:
+		seq_puts(m, "Mobile)\n");
+		break;
+	case SLPC_PLATFORM_SKU_DT:
+		seq_puts(m, "DT)\n");
+		break;
+	case SLPC_PLATFORM_SKU_UNKNOWN:
+	default:
+		seq_puts(m, "unknown)\n");
+		break;
+	}
+	seq_printf(m, "slice count: %d\n",
+		   data.platform_info.slice_count);
+
+	seq_printf(m, "power plan/source: 0x%x\n\tplan:\t",
+		   data.platform_info.power_plan_source);
+	power_plan = (enum slpc_power_plan) SLPC_POWER_PLAN(
+				data.platform_info.power_plan_source);
+	power_source = (enum slpc_power_source) SLPC_POWER_SOURCE(
+				data.platform_info.power_plan_source);
+	switch (power_plan) {
+	case SLPC_POWER_PLAN_UNDEFINED:
+		seq_puts(m, "undefined");
+		break;
+	case SLPC_POWER_PLAN_BATTERY_SAVER:
+		seq_puts(m, "battery saver");
+		break;
+	case SLPC_POWER_PLAN_BALANCED:
+		seq_puts(m, "balanced");
+		break;
+	case SLPC_POWER_PLAN_PERFORMANCE:
+		seq_puts(m, "performance");
+		break;
+	case SLPC_POWER_PLAN_UNKNOWN:
+	default:
+		seq_puts(m, "unknown");
+		break;
+	}
+	seq_puts(m, "\n\tsource:\t");
+	switch (power_source) {
+	case SLPC_POWER_SOURCE_UNDEFINED:
+		seq_puts(m, "undefined\n");
+		break;
+	case SLPC_POWER_SOURCE_AC:
+		seq_puts(m, "AC\n");
+		break;
+	case SLPC_POWER_SOURCE_DC:
+		seq_puts(m, "DC\n");
+		break;
+	case SLPC_POWER_SOURCE_UNKNOWN:
+	default:
+		seq_puts(m, "unknown\n");
+		break;
+	}
+
+	seq_printf(m, "IA frequency (MHz):\n\tP0: %d\n\tP1: %d\n\tPe: %d\n\tPn: %d\n",
+		   data.platform_info.P0_freq * 50,
+		   data.platform_info.P1_freq * 50,
+		   data.platform_info.Pe_freq * 50,
+		   data.platform_info.Pn_freq * 50);
+
+	task_data = &data.task_state_data;
+	seq_printf(m, "task state data: 0x%08x 0x%08x\n",
+		   task_data->bitfield1, task_data->bitfield2);
+
+	seq_printf(m, "\tgtperf task active: %s\n",
+		   yesno(task_data->gtperf_task_active));
+	seq_printf(m, "\tgtperf stall possible: %s\n",
+		   yesno(task_data->gtperf_stall_possible));
+	seq_printf(m, "\tgtperf gaming mode: %s\n",
+		   yesno(task_data->gtperf_gaming_mode));
+	seq_printf(m, "\tgtperf target fps: %d\n",
+		   task_data->gtperf_target_fps);
+
+	seq_printf(m, "\tdcc task active: %s\n",
+		   yesno(task_data->dcc_task_active));
+	seq_printf(m, "\tin dcc: %s\n",
+		   yesno(task_data->in_dcc));
+	seq_printf(m, "\tin dct: %s\n",
+		   yesno(task_data->in_dct));
+	seq_printf(m, "\tfreq switch active: %s\n",
+		   yesno(task_data->freq_switch_active));
+
+	seq_printf(m, "\tibc enabled: %s\n",
+		   yesno(task_data->ibc_enabled));
+	seq_printf(m, "\tibc active: %s\n",
+		   yesno(task_data->ibc_active));
+	seq_printf(m, "\tpg1 enabled: %s\n",
+		   yesno(task_data->pg1_enabled));
+	seq_printf(m, "\tpg1 active: %s\n",
+		   yesno(task_data->pg1_active));
+
+	seq_printf(m, "\tunslice max freq: %dMHz\n",
+		   intel_gpu_freq(dev_priv,
+			task_data->max_unslice_freq * GEN9_FREQ_SCALER));
+	seq_printf(m, "\tunslice min freq: %dMHz\n",
+		   intel_gpu_freq(dev_priv,
+			task_data->min_unslice_freq * GEN9_FREQ_SCALER));
+	seq_printf(m, "\tslice max freq: %dMHz\n",
+		   intel_gpu_freq(dev_priv,
+			task_data->max_slice_freq * GEN9_FREQ_SCALER));
+	seq_printf(m, "\tslice min freq: %dMHz\n",
+		   intel_gpu_freq(dev_priv,
+			task_data->min_slice_freq * GEN9_FREQ_SCALER));
+
+	seq_puts(m, "override parameter bitfield\n");
+	for (i = 0; i < SLPC_OVERRIDE_BITFIELD_SIZE; i++)
+		seq_printf(m, "%d: 0x%08x\n", i,
+			   data.override_parameters_set_bits[i]);
+
+	seq_puts(m, "override parameters (only non-zero shown)\n");
+	for (i = 0; i < SLPC_MAX_OVERRIDE_PARAMETERS; i++) {
+		value = data.override_parameters_values[i];
+		if (value)
+			seq_printf(m, "%d: 0x%8x\n", i, value);
+	}
+
+	return 0;
+}
+
 static int i915_frequency_info(struct seq_file *m, void *unused)
 {
 	struct drm_i915_private *dev_priv = node_to_i915(m->private);
@@ -1098,6 +1262,12 @@ static int i915_frequency_info(struct seq_file *m, void *unused)
 	int ret = 0;
 
 	intel_runtime_pm_get(dev_priv);
+
+	if (dev_priv->guc.slpc.active)
+		seq_printf(m, "SLPC State: SLPC Active\n");
+		//seq_puts(m, "SLPC Active\n");
+        else
+		seq_printf(m, "SLPC State: SLPC NOT Active\n");
 
 	if (IS_GEN5(dev_priv)) {
 		u16 rgvswctl = I915_READ16(MEMSWCTL);
@@ -2296,7 +2466,10 @@ static int i915_rps_boost_info(struct seq_file *m, void *data)
 	struct drm_device *dev = &dev_priv->drm;
 	struct drm_file *file;
 
-	seq_printf(m, "RPS enabled? %d\n", dev_priv->rps.enabled);
+	if (dev_priv->guc.slpc.active)
+		seq_puts(m, "SLPC Active\n");
+
+	seq_printf(m, "RPS enabled? %d\n", dev_priv->rps.rps_enabled);
 	seq_printf(m, "GPU busy? %s [%d requests]\n",
 		   yesno(dev_priv->gt.awake), dev_priv->gt.active_requests);
 	seq_printf(m, "CPU waiting? %d\n", count_irq_waiters(dev_priv));
@@ -2332,7 +2505,7 @@ static int i915_rps_boost_info(struct seq_file *m, void *data)
 	mutex_unlock(&dev->filelist_mutex);
 
 	if (INTEL_GEN(dev_priv) >= 6 &&
-	    dev_priv->rps.enabled &&
+	    dev_priv->rps.rps_enabled &&
 	    dev_priv->gt.active_requests) {
 		u32 rpup, rpupei;
 		u32 rpdown, rpdownei;
@@ -2398,6 +2571,23 @@ static int i915_huc_load_status_info(struct seq_file *m, void *data)
 
 	seq_printf(m, "\nHuC status 0x%08x:\n", I915_READ(HUC_STATUS2));
 
+	return 0;
+}
+
+static int i915_slpc_paramlist_info(struct seq_file *m, void *data)
+{
+	struct drm_i915_private *dev_priv = node_to_i915(m->private);
+	int i;
+
+	if (!dev_priv->guc.slpc.active) {
+		seq_puts(m, "SLPC not active\n");
+		return 0;
+	}
+
+	seq_puts(m, "Param id\tParam description\n");
+	for (i = 0; i < SLPC_MAX_PARAM; i++)
+		seq_printf(m, "%8d\t%s\n", slpc_paramlist[i].id,
+					   slpc_paramlist[i].description);
 	return 0;
 }
 
@@ -4260,7 +4450,12 @@ i915_max_freq_get(void *data, u64 *val)
 	if (INTEL_GEN(dev_priv) < 6)
 		return -ENODEV;
 
-	*val = intel_gpu_freq(dev_priv, dev_priv->rps.max_freq_softlimit);
+	if (dev_priv->guc.slpc.active)
+		*val = intel_gpu_freq(dev_priv,
+				      dev_priv->guc.slpc.max_unslice_freq);
+	else
+		*val = intel_gpu_freq(dev_priv,
+				      dev_priv->rps.max_freq_softlimit);
 	return 0;
 }
 
@@ -4276,20 +4471,32 @@ i915_max_freq_set(void *data, u64 val)
 
 	DRM_DEBUG_DRIVER("Manually setting max freq to %llu\n", val);
 
+	intel_runtime_pm_get(dev_priv);
+
 	ret = mutex_lock_interruptible(&dev_priv->rps.hw_lock);
-	if (ret)
+	if (ret) {
+		intel_runtime_pm_put(dev_priv);
 		return ret;
+	}
 
 	/*
 	 * Turbo will still be enabled, but won't go above the set value.
 	 */
 	val = intel_freq_opcode(dev_priv, val);
 
+	if (dev_priv->guc.slpc.active) {
+		ret = intel_slpc_max_freq_set(dev_priv, val);
+		mutex_unlock(&dev_priv->rps.hw_lock);
+		intel_runtime_pm_put(dev_priv);
+		return ret;
+	}
+
 	hw_max = dev_priv->rps.max_freq;
 	hw_min = dev_priv->rps.min_freq;
 
 	if (val < hw_min || val > hw_max || val < dev_priv->rps.min_freq_softlimit) {
 		mutex_unlock(&dev_priv->rps.hw_lock);
+		intel_runtime_pm_put(dev_priv);
 		return -EINVAL;
 	}
 
@@ -4299,6 +4506,8 @@ i915_max_freq_set(void *data, u64 val)
 		DRM_DEBUG_DRIVER("failed to update RPS to new softlimit\n");
 
 	mutex_unlock(&dev_priv->rps.hw_lock);
+
+	intel_runtime_pm_put(dev_priv);
 
 	return 0;
 }
@@ -4315,7 +4524,12 @@ i915_min_freq_get(void *data, u64 *val)
 	if (INTEL_GEN(dev_priv) < 6)
 		return -ENODEV;
 
-	*val = intel_gpu_freq(dev_priv, dev_priv->rps.min_freq_softlimit);
+	if (dev_priv->guc.slpc.active)
+		*val = intel_gpu_freq(dev_priv,
+				      dev_priv->guc.slpc.min_unslice_freq);
+	else
+		*val = intel_gpu_freq(dev_priv,
+				      dev_priv->rps.min_freq_softlimit);
 	return 0;
 }
 
@@ -4331,14 +4545,25 @@ i915_min_freq_set(void *data, u64 val)
 
 	DRM_DEBUG_DRIVER("Manually setting min freq to %llu\n", val);
 
+	intel_runtime_pm_get(dev_priv);
+
 	ret = mutex_lock_interruptible(&dev_priv->rps.hw_lock);
-	if (ret)
+	if (ret) {
+		intel_runtime_pm_put(dev_priv);
 		return ret;
+	}
 
 	/*
 	 * Turbo will still be enabled, but won't go below the set value.
 	 */
 	val = intel_freq_opcode(dev_priv, val);
+
+	if (dev_priv->guc.slpc.active) {
+		ret = intel_slpc_min_freq_set(dev_priv, val);
+		mutex_unlock(&dev_priv->rps.hw_lock);
+		intel_runtime_pm_put(dev_priv);
+		return ret;
+	}
 
 	hw_max = dev_priv->rps.max_freq;
 	hw_min = dev_priv->rps.min_freq;
@@ -4346,6 +4571,7 @@ i915_min_freq_set(void *data, u64 val)
 	if (val < hw_min ||
 	    val > hw_max || val > dev_priv->rps.max_freq_softlimit) {
 		mutex_unlock(&dev_priv->rps.hw_lock);
+		intel_runtime_pm_put(dev_priv);
 		return -EINVAL;
 	}
 
@@ -4355,6 +4581,8 @@ i915_min_freq_set(void *data, u64 val)
 		DRM_DEBUG_DRIVER("failed to update RPS to new softlimit\n");
 
 	mutex_unlock(&dev_priv->rps.hw_lock);
+
+	intel_runtime_pm_put(dev_priv);
 
 	return 0;
 }
@@ -4674,6 +4902,8 @@ static const struct drm_info_list i915_debugfs_list[] = {
 	{"i915_guc_load_status", i915_guc_load_status_info, 0},
 	{"i915_guc_log_dump", i915_guc_log_dump, 0},
 	{"i915_huc_load_status", i915_huc_load_status_info, 0},
+	{"i915_slpc_paramlist", i915_slpc_paramlist_info, 0},
+	{"i915_slpc_info", i915_slpc_info, 0},
 	{"i915_frequency_info", i915_frequency_info, 0},
 	{"i915_hangcheck_info", i915_hangcheck_info, 0},
 	{"i915_drpc_info", i915_drpc_info, 0},
@@ -4716,6 +4946,9 @@ static const struct i915_debugfs_files {
 	const struct file_operations *fops;
 } i915_debugfs_files[] = {
 	{"i915_wedged", &i915_wedged_fops},
+	{"i915_slpc_gtperf", &i915_slpc_gtperf_fops},
+	{"i915_slpc_balancer", &i915_slpc_balancer_fops},
+	{"i915_slpc_dcc", &i915_slpc_dcc_fops},
 	{"i915_max_freq", &i915_max_freq_fops},
 	{"i915_min_freq", &i915_min_freq_fops},
 	{"i915_cache_sharing", &i915_cache_sharing_fops},
@@ -4734,7 +4967,8 @@ static const struct i915_debugfs_files {
 	{"i915_dp_test_data", &i915_displayport_test_data_fops},
 	{"i915_dp_test_type", &i915_displayport_test_type_fops},
 	{"i915_dp_test_active", &i915_displayport_test_active_fops},
-	{"i915_guc_log_control", &i915_guc_log_control_fops}
+	{"i915_guc_log_control", &i915_guc_log_control_fops},
+	{"i915_slpc_param_ctl", &i915_slpc_param_ctl_fops},
 };
 
 int i915_debugfs_register(struct drm_i915_private *dev_priv)

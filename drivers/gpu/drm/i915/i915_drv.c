@@ -1021,6 +1021,8 @@ static int i915_driver_init_hw(struct drm_i915_private *dev_priv)
 
 	intel_sanitize_options(dev_priv);
 
+	intel_slpc_save_default_rps(dev_priv);
+
 	ret = i915_ggtt_probe_hw(dev_priv);
 	if (ret)
 		return ret;
@@ -2358,8 +2360,15 @@ static int intel_runtime_suspend(struct device *kdev)
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	int ret;
 
-	if (WARN_ON_ONCE(!(dev_priv->rps.enabled && intel_enable_rc6())))
+	if (WARN_ON_ONCE(!intel_enable_rc6()))
 		return -ENODEV;
+
+	if (INTEL_GEN(dev_priv) >= 9) {
+		if (WARN_ON_ONCE(!dev_priv->rps.rc6_enabled))
+			return -ENODEV;
+	} else if (WARN_ON_ONCE(!dev_priv->rps.rps_enabled)) {
+		return -ENODEV;
+	}
 
 	if (WARN_ON_ONCE(!HAS_RUNTIME_PM(dev_priv)))
 		return -ENODEV;

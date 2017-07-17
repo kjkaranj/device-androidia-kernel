@@ -1806,6 +1806,7 @@ void gen6_rps_idle(struct drm_i915_private *dev_priv);
 void gen6_rps_boost(struct drm_i915_private *dev_priv,
 		    struct intel_rps_client *rps,
 		    unsigned long submitted);
+void gen6_init_rps_frequencies(struct drm_i915_private *dev_priv);
 void intel_queue_rps_boost_for_request(struct drm_i915_gem_request *req);
 void vlv_wm_get_hw_state(struct drm_device *dev);
 void ilk_wm_get_hw_state(struct drm_device *dev);

@@ -27,10 +27,13 @@
 #include "intel_guc_fwif.h"
 #include "i915_guc_reg.h"
 #include "intel_ringbuffer.h"
+#include "intel_slpc.h"
 
 #include "i915_vma.h"
 
 struct drm_i915_gem_request;
+
+#define I915_FIRMWARE_URL  "https://01.org/linuxgraphics/intel-linux-graphics-firmwares"
 
 /*
  * This structure primarily describes the GEM object shared with the GuC.
@@ -172,6 +175,8 @@ struct intel_guc {
 	uint64_t submissions[I915_NUM_ENGINES];
 	uint32_t last_seqno[I915_NUM_ENGINES];
 
+	struct intel_slpc slpc;
+
 	/* To serialize the intel_guc_send actions */
 	struct mutex send_mutex;
 };
@@ -187,6 +192,8 @@ struct intel_huc {
 void intel_uc_init_early(struct drm_i915_private *dev_priv);
 int intel_guc_send(struct intel_guc *guc, const u32 *action, u32 len);
 int intel_guc_sample_forcewake(struct intel_guc *guc);
+int __intel_guc_send_mmio(struct intel_guc *guc, const u32 *action, u32 len,
+			  u32 *output);
 
 /* intel_guc_loader.c */
 extern void intel_guc_init(struct drm_i915_private *dev_priv);

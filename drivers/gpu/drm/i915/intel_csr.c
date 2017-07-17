@@ -50,11 +50,6 @@ MODULE_FIRMWARE(I915_CSR_SKL);
 MODULE_FIRMWARE(I915_CSR_BXT);
 #define BXT_CSR_VERSION_REQUIRED	CSR_VERSION(1, 7)
 
-#define FIRMWARE_URL  "https://01.org/linuxgraphics/intel-linux-graphics-firmwares"
-
-
-
-
 #define CSR_MAX_FW_SIZE			0x2FFF
 #define CSR_DEFAULT_FW_OFFSET		0xFFFFFFFF
 
@@ -276,13 +271,16 @@ static uint32_t *parse_csr_fw(struct drm_i915_private *dev_priv,
 	uint32_t *dmc_payload;
 	uint32_t required_version;
 
-	if (!fw)
+	if (!fw) {
+        DRM_INFO(KERN_ERR "$$$$ fn:%s ln:%d $$$$\n", __func__, __LINE__);
 		return NULL;
+        }
 
 	/* Extract CSS Header information*/
 	css_header = (struct intel_css_header *)fw->data;
 	if (sizeof(struct intel_css_header) !=
 	    (css_header->header_len * 4)) {
+        DRM_INFO(KERN_ERR "$$$$ fn:%s ln:%d $$$$\n", __func__, __LINE__);
 		DRM_ERROR("Firmware has wrong CSS header length %u bytes\n",
 			  (css_header->header_len * 4));
 		return NULL;
@@ -304,12 +302,14 @@ static uint32_t *parse_csr_fw(struct drm_i915_private *dev_priv,
 	}
 
 	if (csr->version != required_version) {
+        DRM_INFO(KERN_ERR "$$$$ fn:%s ln:%d $$$$\n", __func__, __LINE__);
 		DRM_INFO("Refusing to load DMC firmware v%u.%u,"
-			 " please use v%u.%u [" FIRMWARE_URL "].\n",
+			 " please use v%u.%u [%s].\n",
 			 CSR_VERSION_MAJOR(csr->version),
 			 CSR_VERSION_MINOR(csr->version),
 			 CSR_VERSION_MAJOR(required_version),
-			 CSR_VERSION_MINOR(required_version));
+			 CSR_VERSION_MINOR(required_version),
+			 I915_FIRMWARE_URL);
 		return NULL;
 	}
 
@@ -320,6 +320,7 @@ static uint32_t *parse_csr_fw(struct drm_i915_private *dev_priv,
 		&fw->data[readcount];
 	if (sizeof(struct intel_package_header) !=
 	    (package_header->header_len * 4)) {
+        DRM_INFO(KERN_ERR "$$$$ fn:%s ln:%d $$$$\n", __func__, __LINE__);
 		DRM_ERROR("Firmware has wrong package header length %u bytes\n",
 			  (package_header->header_len * 4));
 		return NULL;
@@ -341,6 +342,7 @@ static uint32_t *parse_csr_fw(struct drm_i915_private *dev_priv,
 			dmc_offset = package_header->fw_info[i].offset;
 	}
 	if (dmc_offset == CSR_DEFAULT_FW_OFFSET) {
+        DRM_INFO(KERN_ERR "$$$$ fn:%s ln:%d $$$$\n", __func__, __LINE__);
 		DRM_ERROR("Firmware not supported for %c stepping\n",
 			  si->stepping);
 		return NULL;
@@ -350,6 +352,7 @@ static uint32_t *parse_csr_fw(struct drm_i915_private *dev_priv,
 	/* Extract dmc_header information. */
 	dmc_header = (struct intel_dmc_header *)&fw->data[readcount];
 	if (sizeof(struct intel_dmc_header) != (dmc_header->header_len)) {
+        DRM_INFO(KERN_ERR "$$$$ fn:%s ln:%d $$$$\n", __func__, __LINE__);
 		DRM_ERROR("Firmware has wrong dmc header length %u bytes\n",
 			  (dmc_header->header_len));
 		return NULL;
@@ -358,6 +361,7 @@ static uint32_t *parse_csr_fw(struct drm_i915_private *dev_priv,
 
 	/* Cache the dmc header info. */
 	if (dmc_header->mmio_count > ARRAY_SIZE(csr->mmioaddr)) {
+        DRM_INFO(KERN_ERR "$$$$ fn:%s ln:%d $$$$\n", __func__, __LINE__);
 		DRM_ERROR("Firmware has wrong mmio count %u\n",
 			  dmc_header->mmio_count);
 		return NULL;
@@ -366,6 +370,7 @@ static uint32_t *parse_csr_fw(struct drm_i915_private *dev_priv,
 	for (i = 0; i < dmc_header->mmio_count; i++) {
 		if (dmc_header->mmioaddr[i] < CSR_MMIO_START_RANGE ||
 		    dmc_header->mmioaddr[i] > CSR_MMIO_END_RANGE) {
+        DRM_INFO(KERN_ERR "$$$$ fn:%s ln:%d $$$$\n", __func__, __LINE__);
 			DRM_ERROR(" Firmware has wrong mmio address 0x%x\n",
 				  dmc_header->mmioaddr[i]);
 			return NULL;
@@ -377,6 +382,7 @@ static uint32_t *parse_csr_fw(struct drm_i915_private *dev_priv,
 	/* fw_size is in dwords, so multiplied by 4 to convert into bytes. */
 	nbytes = dmc_header->fw_size * 4;
 	if (nbytes > CSR_MAX_FW_SIZE) {
+        DRM_INFO(KERN_ERR "$$$$ fn:%s ln:%d $$$$\n", __func__, __LINE__);
 		DRM_ERROR("CSR firmware too big (%u) bytes\n", nbytes);
 		return NULL;
 	}
@@ -384,6 +390,7 @@ static uint32_t *parse_csr_fw(struct drm_i915_private *dev_priv,
 
 	dmc_payload = kmalloc(nbytes, GFP_KERNEL);
 	if (!dmc_payload) {
+        DRM_INFO(KERN_ERR "$$$$ fn:%s ln:%d $$$$\n", __func__, __LINE__);
 		DRM_ERROR("Memory allocation failed for dmc payload\n");
 		return NULL;
 	}
@@ -401,10 +408,15 @@ static void csr_load_work_fn(struct work_struct *work)
 	csr = &dev_priv->csr;
 
 	request_firmware(&fw, dev_priv->csr.fw_path, &dev_priv->drm.pdev->dev);
-	if (fw)
+	if (fw) {
+        DRM_INFO(KERN_ERR "$$$$ fn:%s ln:%d $$$$\n", __func__, __LINE__);
 		dev_priv->csr.dmc_payload = parse_csr_fw(dev_priv, fw);
+        }
 
+        DRM_INFO(KERN_ERR "$$$$ fn:%s ln:%d dev_priv->csr.dmc_payload:%p $$$$\n", __func__,
+                                        __LINE__,dev_priv->csr.dmc_payload);
 	if (dev_priv->csr.dmc_payload) {
+        DRM_INFO(KERN_ERR "$$$$ fn:%s ln:%d $$$$\n", __func__, __LINE__);
 		intel_csr_load_program(dev_priv);
 
 		intel_display_power_put(dev_priv, POWER_DOMAIN_INIT);
@@ -415,9 +427,9 @@ static void csr_load_work_fn(struct work_struct *work)
 			 CSR_VERSION_MINOR(csr->version));
 	} else {
 		dev_notice(dev_priv->drm.dev,
-			   "Failed to load DMC firmware"
-			   " [" FIRMWARE_URL "],"
-			   " disabling runtime power management.\n");
+			   " [%s],"
+			   " disabling runtime power management.\n",
+			   I915_FIRMWARE_URL);
 	}
 
 	release_firmware(fw);

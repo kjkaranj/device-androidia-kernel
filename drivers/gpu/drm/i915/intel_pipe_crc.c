@@ -735,49 +735,6 @@ out:
 	return ret;
 }
 
-/*
- * Parse pipe CRC command strings:
- *   command: wsp* object wsp+ name wsp+ source wsp*
- *   object: 'pipe'
- *   name: (A | B | C)
- *   source: (none | plane1 | plane2 | pf)
- *   wsp: (#0x20 | #0x9 | #0xA)+
- *
- * eg.:
- *  "pipe A plane1"  ->  Start CRC computations on plane1 of pipe A
- *  "pipe A none"    ->  Stop CRC
- */
-static int display_crc_ctl_tokenize(char *buf, char *words[], int max_words)
-{
-	int n_words = 0;
-
-	while (*buf) {
-		char *end;
-
-		/* skip leading white space */
-		buf = skip_spaces(buf);
-		if (!*buf)
-			break;	/* end of buffer */
-
-		/* find end of word */
-		for (end = buf; *end && !isspace(*end); end++)
-			;
-
-		if (n_words == max_words) {
-			DRM_DEBUG_DRIVER("too many words, allowed <= %d\n",
-					 max_words);
-			return -EINVAL;	/* ran out of words[] before bytes */
-		}
-
-		if (*end)
-			*end++ = '\0';
-		words[n_words++] = buf;
-		buf = end;
-	}
-
-	return n_words;
-}
-
 enum intel_pipe_crc_object {
 	PIPE_CRC_OBJECT_PIPE,
 };
@@ -831,6 +788,49 @@ display_crc_ctl_parse_source(const char *buf, enum intel_pipe_crc_source *s)
 	return -EINVAL;
 }
 
+int buffer_tokenize(char *buf, char *words[], int max_words)
+{
+	int n_words = 0;
+
+	while (*buf) {
+		char *end;
+
+		/* skip leading white space */
+		buf = skip_spaces(buf);
+		if (!*buf)
+			break;	/* end of buffer */
+
+		/* find end of word */
+		for (end = buf; *end && !isspace(*end); end++)
+			;
+
+		if (n_words == max_words) {
+			DRM_DEBUG_DRIVER("too many words, allowed <= %d\n",
+					 max_words);
+			return -EINVAL;	/* ran out of words[] before bytes */
+		}
+
+		if (*end)
+			*end++ = '\0';
+		words[n_words++] = buf;
+		buf = end;
+	}
+
+	return n_words;
+}
+
+/*
+ * Parse pipe CRC command strings:
+ *   command: wsp* object wsp+ name wsp+ source wsp*
+ *   object: 'pipe'
+ *   name: (A | B | C)
+ *   source: (none | plane1 | plane2 | pf)
+ *   wsp: (#0x20 | #0x9 | #0xA)+
+ *
+ * eg.:
+ *  "pipe A plane1"  ->  Start CRC computations on plane1 of pipe A
+ *  "pipe A none"    ->  Stop CRC
+ */
 static int display_crc_ctl_parse(struct drm_i915_private *dev_priv,
 				 char *buf, size_t len)
 {
@@ -841,7 +841,7 @@ static int display_crc_ctl_parse(struct drm_i915_private *dev_priv,
 	enum intel_pipe_crc_object object;
 	enum intel_pipe_crc_source source;
 
-	n_words = display_crc_ctl_tokenize(buf, words, N_WORDS);
+	n_words = buffer_tokenize(buf, words, N_WORDS);
 	if (n_words != N_WORDS) {
 		DRM_DEBUG_DRIVER("tokenize failed, a command is %d words\n",
 				 N_WORDS);

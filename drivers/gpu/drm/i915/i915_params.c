@@ -36,6 +36,7 @@ struct i915_params i915 __read_mostly = {
 	.enable_dc = -1,
 	.enable_fbc = -1,
 	.enable_execlists = -1,
+	.enable_slpc = -1,
 	.enable_hangcheck = true,
 	.enable_ppgtt = -1,
 	.enable_psr = -1,
@@ -56,9 +57,10 @@ struct i915_params i915 __read_mostly = {
 	.verbose_state_checks = 1,
 	.nuclear_pageflip = 0,
 	.edp_vswing = 0,
-	.enable_guc_loading = 0,
-	.enable_guc_submission = 0,
+	.enable_guc_loading = 1,
+	.enable_guc_submission = 1,
 	.guc_log_level = -1,
+	.enable_guc_critical_logging = false,
 	.enable_dp_mst = true,
 	.inject_load_failure = 0,
 	.enable_dpcd_backlight = false,
@@ -139,6 +141,11 @@ MODULE_PARM_DESC(enable_ppgtt,
 module_param_named_unsafe(enable_execlists, i915.enable_execlists, int, 0400);
 MODULE_PARM_DESC(enable_execlists,
 	"Override execlists usage. "
+	"(-1=auto [default], 0=disabled, 1=enabled)");
+
+module_param_named_unsafe(enable_slpc, i915.enable_slpc, int, 0400);
+MODULE_PARM_DESC(enable_slpc,
+	"Override single-loop-power-controller (slpc) usage. "
 	"(-1=auto [default], 0=disabled, 1=enabled)");
 
 module_param_named_unsafe(enable_psr, i915.enable_psr, int, 0600);
@@ -230,6 +237,10 @@ MODULE_PARM_DESC(enable_guc_submission,
 module_param_named(guc_log_level, i915.guc_log_level, int, 0400);
 MODULE_PARM_DESC(guc_log_level,
 	"GuC firmware logging level (-1:disabled (default), 0-3:enabled)");
+
+module_param_named(enable_guc_critical_logging, i915.enable_guc_critical_logging, bool, 0400);
+MODULE_PARM_DESC(enable_guc_critical_logging,
+	"Enable GuC firmware critical logging (default: false)");
 
 module_param_named_unsafe(enable_dp_mst, i915.enable_dp_mst, bool, 0600);
 MODULE_PARM_DESC(enable_dp_mst,
